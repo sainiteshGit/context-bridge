@@ -299,6 +299,12 @@ Set via environment variables or `.env` file:
 
 ---
 
+## Author
+
+**Sai Nitesh** — [sainitesh.com](https://sainitesh.com/)
+
+---
+
 ## License
 
 MIT
