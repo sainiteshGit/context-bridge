@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+._*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Linting / formatting cache
+.ruff_cache/
+
+# Browser extension build
+extension/dist/
+extension/node_modules/
+
+# Vision docs (personal/private)
+docs/vision/
+
+# Demo video (too large for git — use Git LFS or external hosting)
+docs/demo/*.mp4
+
+# Databases (if local storage is added later)
+*.sqlite3
+*.db
+
+# Logs
+*.log

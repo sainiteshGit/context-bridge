@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🌉 Context Bridge</h1>
+      <p class="subtitle">Your personal context layer</p>
+    </header>
+
+    <!-- Connection Status -->
+    <div id="status-bar" class="status disconnected">
+      <span id="status-dot"></span>
+      <span id="status-text">Disconnected</span>
+    </div>
+
+    <!-- Setup Section (shown when not configured) -->
+    <section id="setup-section">
+      <label for="api-url">API URL</label>
+      <input type="text" id="api-url" placeholder="http://localhost:8000" value="http://localhost:8000">
+      <label for="user-id">User ID</label>
+      <input type="text" id="user-id" placeholder="Your user ID (UUID)">
+      <button id="connect-btn" class="btn primary">Connect</button>
+    </section>
+
+    <!-- Dashboard (shown when connected) -->
+    <section id="dashboard-section" class="hidden">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value" id="fact-count">0</span>
+          <span class="stat-label">Facts</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="app-count">0</span>
+          <span class="stat-label">Apps</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="category-count">0</span>
+          <span class="stat-label">Categories</span>
+        </div>
+      </div>
+
+      <!-- Quick Add Fact -->
+      <div class="quick-add">
+        <h3>Quick Add</h3>
+        <select id="fact-category">
+          <option value="personal_profile">Profile</option>
+          <option value="fitness_wellness">Fitness</option>
+          <option value="family_social">Family</option>
+          <option value="food_nutrition">Food</option>
+          <option value="home_environment">Home</option>
+          <option value="pet_care">Pet Care</option>
+          <option value="finance_budget">Finance</option>
+          <option value="travel_commute">Travel</option>
+          <option value="hobby_interest">Hobby</option>
+          <option value="health_medical">Health</option>
+        </select>
+        <input type="text" id="fact-key" placeholder="Key (e.g. favorite_cuisine)">
+        <input type="text" id="fact-value" placeholder="Value (e.g. Italian)">
+        <button id="add-fact-btn" class="btn primary">Add Fact</button>
+      </div>
+
+      <!-- Recent Facts -->
+      <div class="recent-facts">
+        <h3>Recent Facts</h3>
+        <ul id="facts-list"></ul>
+      </div>
+
+      <!-- ChatGPT Integration -->
+      <div class="chatgpt-section">
+        <h3>ChatGPT Integration</h3>
+        <p class="hint">Open <a href="https://chatgpt.com" target="_blank">chatgpt.com</a> or <a href="https://www.perplexity.ai" target="_blank">perplexity.ai</a> and look for the 🌉 button in the bottom-right corner to inject your context.</p>
+      </div>
+
+      <button id="disconnect-btn" class="btn secondary">Disconnect</button>
+    </section>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
