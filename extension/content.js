@@ -127,6 +127,16 @@
     .cb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .cb-btn-load { background: #0f3460; color: white; }
     .cb-btn-inject { background: #e94560; color: white; }
+    .cb-btn-sync { background: #533483; color: white; }
+
+    .cb-sync-status {
+      font-size: 11px; color: #999; padding: 4px 16px 0;
+      text-align: center; min-height: 0;
+      transition: all 0.2s;
+    }
+    .cb-sync-status.cb-success { color: #4ecca3; }
+    .cb-sync-status.cb-error { color: #e94560; }
+
     .cb-hidden { display: none !important; }
   `;
   shadow.appendChild(style);
@@ -162,9 +172,11 @@
         <textarea id="cb-context-text" rows="6"></textarea>
       </div>
     </div>
+    <div class="cb-sync-status cb-hidden" id="cb-sync-status"></div>
     <div class="cb-panel-footer">
       <button class="cb-btn cb-btn-load" id="cb-load-btn">Load Context</button>
       <button class="cb-btn cb-btn-inject cb-hidden" id="cb-inject-btn">Inject into Chat</button>
+      <button class="cb-btn cb-btn-sync" id="cb-sync-btn">Sync Chat</button>
     </div>
   `;
   shadow.appendChild(panel);
@@ -181,13 +193,16 @@
 
   const loadBtn = shadow.querySelector("#cb-load-btn");
   const injectBtn = shadow.querySelector("#cb-inject-btn");
+  const syncBtn = shadow.querySelector("#cb-sync-btn");
   const statusEl = shadow.querySelector("#cb-status");
   const categoriesEl = shadow.querySelector("#cb-categories");
   const previewEl = shadow.querySelector("#cb-preview");
   const textArea = shadow.querySelector("#cb-context-text");
+  const syncStatusEl = shadow.querySelector("#cb-sync-status");
 
   loadBtn.addEventListener("click", loadContext);
   injectBtn.addEventListener("click", injectContext);
+  syncBtn.addEventListener("click", syncChat);
 
   // ─── Load Context from API via Background ────────────────
 
@@ -316,6 +331,196 @@
   }
 
   // ─── Helpers ─────────────────────────────────────────────
+
+  /**
+   * Detect which site we are on.
+   */
+  function detectSource() {
+    const host = window.location.hostname;
+    if (host.includes("chatgpt") || host.includes("openai")) return "chatgpt";
+    if (host.includes("perplexity")) return "perplexity";
+    return "unknown";
+  }
+
+  /**
+   * Extract chat messages from the current page DOM.
+   * Returns array of { role: "user"|"assistant", text: string }.
+   * Uses multiple selector strategies to handle DOM changes.
+   */
+  function extractChatMessages() {
+    const source = detectSource();
+    const messages = [];
+
+    if (source === "chatgpt") {
+      // Strategy 1: data-message-author-role (classic)
+      let msgEls = document.querySelectorAll("[data-message-author-role]");
+      if (msgEls.length > 0) {
+        msgEls.forEach((el) => {
+          const role = el.getAttribute("data-message-author-role");
+          const text = el.innerText.trim();
+          if (text) {
+            messages.push({ role: role === "user" ? "user" : "assistant", text });
+          }
+        });
+        return messages;
+      }
+
+      // Strategy 2: conversation turns with data-testid
+      const turns = document.querySelectorAll("[data-testid^='conversation-turn-']");
+      if (turns.length > 0) {
+        turns.forEach((el) => {
+          const text = el.innerText.trim();
+          if (text) {
+            // Extract turn number from data-testid to determine role
+            const testId = el.getAttribute("data-testid") || "";
+            const turnNum = parseInt(testId.replace("conversation-turn-", ""), 10);
+            messages.push({ role: turnNum % 2 === 0 ? "user" : "assistant", text });
+          }
+        });
+        return messages;
+      }
+
+      // Strategy 3: article elements inside main
+      const articles = document.querySelectorAll("main article");
+      if (articles.length > 0) {
+        articles.forEach((el) => {
+          const text = el.innerText.trim();
+          if (text) {
+            messages.push({ role: messages.length % 2 === 0 ? "user" : "assistant", text });
+          }
+        });
+        return messages;
+      }
+
+      // Strategy 4: grouped message containers (recent ChatGPT layouts)
+      const groups = document.querySelectorAll(
+        "main .group\\/conversation-turn, main [class*='ConversationItem'], main [class*='message']"
+      );
+      if (groups.length > 0) {
+        groups.forEach((el) => {
+          const text = el.innerText.trim();
+          if (text) {
+            messages.push({ role: messages.length % 2 === 0 ? "user" : "assistant", text });
+          }
+        });
+        return messages;
+      }
+
+      // Strategy 5: brute force — grab all direct children of the chat thread
+      const threadContainer = document.querySelector(
+        "main .flex.flex-col, main [class*='thread'], main [role='presentation']"
+      );
+      if (threadContainer) {
+        const children = threadContainer.children;
+        for (let i = 0; i < children.length; i++) {
+          const text = children[i].innerText.trim();
+          if (text && text.length > 5) {
+            messages.push({ role: i % 2 === 0 ? "user" : "assistant", text });
+          }
+        }
+      }
+
+    } else if (source === "perplexity") {
+      // Perplexity: each answer thread is a block
+      // Strategy 1: question headings + answer prose
+      const threadBlocks = document.querySelectorAll(
+        "[class*='ThreadMessage'], [class*='AnswerBlock'], [class*='ConversationPair']"
+      );
+      if (threadBlocks.length > 0) {
+        threadBlocks.forEach((el) => {
+          const text = el.innerText.trim();
+          if (text) {
+            messages.push({ role: messages.length % 2 === 0 ? "user" : "assistant", text });
+          }
+        });
+        return messages;
+      }
+
+      // Strategy 2: query elements + answer elements
+      const allBlocks = document.querySelectorAll(
+        "main [class*='query'], main [class*='Query'], main h1, " +
+        "main [class*='answer'], main [class*='Answer'], main [class*='prose']"
+      );
+      allBlocks.forEach((el) => {
+        const text = el.innerText.trim();
+        const cls = (el.className || "").toLowerCase();
+        if (text) {
+          const isQuery = cls.includes("query") || el.tagName === "H1";
+          messages.push({ role: isQuery ? "user" : "assistant", text });
+        }
+      });
+    }
+
+    return messages;
+  }
+
+  /**
+   * Convert extracted messages into fact payloads for the API.
+   * Only user messages are synced — they represent the user's actual context.
+   */
+  function messagesToFacts(messages, source) {
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const userMessages = messages.filter((m) => m.role === "user");
+
+    return userMessages.map((msg, i) => ({
+      category: "profile",
+      key: `chat-${source}-${now}-${i + 1}`,
+      value: msg.text.slice(0, 2000), // cap at 2000 chars per fact
+      sensitivity: "low",
+    }));
+  }
+
+  // ─── Sync Chat Messages to API ───────────────────────────
+
+  async function syncChat() {
+    const source = detectSource();
+    console.log("[Context Bridge] Sync started, source:", source);
+
+    syncStatusEl.textContent = "Extracting messages…";
+    syncStatusEl.className = "cb-sync-status";
+    syncStatusEl.classList.remove("cb-hidden");
+    syncBtn.disabled = true;
+    syncBtn.textContent = "Syncing…";
+
+    try {
+      const messages = extractChatMessages();
+      console.log("[Context Bridge] Extracted messages:", messages.length, messages);
+
+      if (messages.length === 0) {
+        syncStatusEl.textContent = "No chat messages found on this page.";
+        syncStatusEl.classList.add("cb-error");
+        return;
+      }
+
+      const facts = messagesToFacts(messages, source);
+
+      syncStatusEl.textContent = `Found ${messages.length} messages, syncing ${facts.length} user facts…`;
+
+      const response = await chrome.runtime.sendMessage({
+        type: "SYNC_CHAT",
+        payload: { messages: facts, source },
+      });
+
+      if (response.error) {
+        syncStatusEl.textContent = "Error: " + response.error;
+        syncStatusEl.classList.add("cb-error");
+        return;
+      }
+
+      syncStatusEl.textContent =
+        `✅ Synced ${response.synced}/${response.total} facts from ${source}.` +
+        (response.errors.length > 0
+          ? ` (${response.errors.length} failed)`
+          : "");
+      syncStatusEl.classList.add("cb-success");
+    } catch (err) {
+      syncStatusEl.textContent = "Sync failed: " + err.message;
+      syncStatusEl.classList.add("cb-error");
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = "Sync Chat";
+    }
+  }
 
   function findChatInput() {
     // ChatGPT: ProseMirror editor

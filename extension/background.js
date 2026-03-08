@@ -25,6 +25,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // async
   }
+
+  if (message.type === "SYNC_CHAT") {
+    handleSyncChat(message.payload)
+      .then(sendResponse)
+      .catch((err) => {
+        sendResponse({ error: err.message });
+      });
+    return true; // async
+  }
 });
 
 /**
@@ -76,4 +85,55 @@ async function handleFetchContext() {
   }
 
   return { snapshots, user };
+}
+
+/**
+ * Sync chat messages back to the Context Bridge API as context facts.
+ * Each message becomes a fact under the PROFILE category with source tracking.
+ */
+async function handleSyncChat(payload) {
+  const config = await chrome.storage.local.get(["apiUrl", "userId"]);
+
+  if (!config.apiUrl || !config.userId) {
+    return { error: "Not configured. Open the Context Bridge popup and connect first." };
+  }
+
+  const { apiUrl, userId } = config;
+  const { messages, source } = payload;
+
+  if (!messages || messages.length === 0) {
+    return { error: "No messages found to sync." };
+  }
+
+  let synced = 0;
+  const errors = [];
+
+  for (const msg of messages) {
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/users/${userId}/facts/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: msg.category || "profile",
+          key: msg.key,
+          value: msg.value,
+          sensitivity: msg.sensitivity || "low",
+          source: source || "chat",
+          confidence: 0.7,
+          tags: ["synced-from-chat", source || "chat"],
+        }),
+      });
+
+      if (res.ok) {
+        synced++;
+      } else {
+        const body = await res.json().catch(() => ({}));
+        errors.push(body.detail || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+
+  return { synced, total: messages.length, errors };
 }
